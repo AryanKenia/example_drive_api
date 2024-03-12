@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Drive 2</title>
+  </head>
+  <body>
+    <h1>Hello World</h1>
+
+    async <button onclick="createPicker()">Open Google Picker</button>
+
+    <p id="result"></p>
+    <script>
+      let tokenClient;
+      let accessToken = null;
+      let pickerInited = false;
+      let gisInited = false;
+
+      // Use the API Loader script to load google.picker
+      function onApiLoad() {
+        console.log("api loaded");
+        gapi.load("picker", onPickerApiLoad);
+      }
+
+      function onPickerApiLoad() {
+        pickerInited = true;
+      }
+
+      function gisLoaded() {
+        // TODO(developer): Replace with your client ID and required scopes.
+        console.log("gis loaded");
+        fetch("/keys.json")
+          .then((response) => response.json())
+          .then((data) => {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+              client_id: data.clientId,
+              scope: "https://www.googleapis.com/auth/drive",
+              callback: "", // defined later
+            });
+            gisInited = true;
+          });
+      }
+
+      // Create and render a Google Picker object for selecting from Drive.
+      async function createPicker() {
+        const resp = await fetch("/keys.json");
+        const { apiKey } = await resp.json();
+
+        const showPicker = () => {
+          // TODO(developer): Replace with your API key
+          const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS).setSelectFolderEnabled(true);
+          const picker = new google.picker.PickerBuilder().addView(view).setOAuthToken(accessToken).setDeveloperKey(apiKey).setCallback(pickerCallback).build();
+          picker.setVisible(true);
+        };
+
+        // Request an access token.
+        tokenClient.callback = async (response) => {
+          if (response.error !== undefined) {
+            throw response;
+          }
+          accessToken = response.access_token;
+          showPicker();
+        };
+
+        if (accessToken === null) {
+          // Prompt the user to select a Google Account and ask for consent to share their data
+          // when establishing a new session.
+          tokenClient.requestAccessToken({ prompt: "consent" });
+        } else {
+          // Skip display of account chooser and consent dialog for an existing session.
+          tokenClient.requestAccessToken({ prompt: "" });
+        }
+      }
+
+      async function pickerCallback(data) {
+        console.log(data);
+        let url = "nothing";
+        const resp = await fetch("/keys.json");
+        const { apiKey } = await resp.json();
+        // if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
+        //   let doc = data[google.picker.Response.DOCUMENTS][0];
+        //   console.log(data.docs[0].id);
+        //   url = doc[google.picker.Document.URL];
+        //   fetch(`https://www.googleapis.com/drive/v3/files/${data.docs[0].id}?key={apiKey}`, {
+        //     method: "GET",
+        //     headers: {
+        //       Authorization: "Bearer " + accessToken,
+        //     },
+        //   })
+        //     .then((response) => response.json())
+        //     .then((data) => {
+        //       console.log(data);
+        //     });
+        //   fetch(`https://www.googleapis.com/drive/v3/files/${data.docs[0].id}?key={apiKey}&alt=media`, {
+        //     method: "GET",
+        //     headers: {
+        //       Authorization: "Bearer " + accessToken,
+        //     },
+        //   })
+        //     .then((response) => response.json())
+        //     .then((data) => {
+        //     });
+        // }
+
+        const file = new Blob(["bye"], { type: "text/plain" });
+        const metadata = {
+          name: "example_upload.txt",
+          mimeType: "text/plain",
+          parents: ["root"], // Google Drive folder id
+        };
+        const form = new FormData();
+        form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+        form.append("file", file);
+
+        const updateUrl = `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&key=${apiKey}&uploadType=media`;
+        fetch(updateUrl, {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + accessToken,
+          },
+          body: form,
+        })
+          .then((res) => {
+            return res.json();
+          })
+          .then(function (val) {
+            console.log(val);
+          });
+        let message = `You picked: ${url}`;
+
+        document.getElementById("result").innerText = message;
+      }
+    </script>
+
+    <!-- Load the Google API Loader script. -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="onApiLoad()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+  </body>
+</html>
